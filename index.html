@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>IVF Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --bg: #0d0d0d;
+      --radius: 10px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: #fff;
+      font-family: system-ui, -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 18px 10px;
+      gap: 12px;
+      min-height: 100%;
+    }
+
+    h1 {
+      font-size: clamp(1rem, 4vw, 1.3rem);
+      letter-spacing: 0.07em;
+      color: #e0e0e0;
+    }
+
+    /* ── Botón archivo (solo visible en modo local) ── */
+    #load-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 13px 28px;
+      border-radius: 8px;
+      font-size: clamp(0.9rem, 3.5vw, 1rem);
+      cursor: pointer;
+      touch-action: manipulation;
+      width: min(90vw, 280px);
+      transition: background 0.15s;
+    }
+    #load-btn:active { background: var(--accent-hover); }
+
+    /* ── Barra de progreso de descarga ── */
+    #progress-wrap {
+      width: min(90vw, 480px);
+      background: #1e1e1e;
+      border-radius: 6px;
+      overflow: hidden;
+      height: 6px;
+      display: none;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      transition: width 0.2s;
+    }
+
+    #status {
+      font-size: clamp(0.72rem, 3vw, 0.82rem);
+      color: #888;
+      text-align: center;
+      min-height: 1.1em;
+      padding: 0 8px;
+    }
+
+    /* ── Player container ── */
+    #player-wrap {
+      position: relative;
+      width: 100%;
+      max-width: min(576px, 100vw);
+      background: #000;
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: none;
+      aspect-ratio: 9 / 16;
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    /* ── Choice overlay ── */
+    .choice-bg {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.82);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(10px, 3vw, 18px);
+      padding: 20px 14px;
+      pointer-events: auto;
+    }
+
+    .choice-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: clamp(12px, 3vh, 17px) clamp(20px, 6vw, 36px);
+      font-size: clamp(1rem, 4.5vw, 1.15rem);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      touch-action: manipulation;
+      width: min(88%, 300px);
+      min-height: 52px;
+      transition: background 0.12s, transform 0.08s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .choice-btn:active { background: var(--accent-hover); transform: scale(0.97); }
+    @media (hover: hover) {
+      .choice-btn:hover { background: var(--accent-hover); transform: scale(1.02); }
+    }
+
+    /* ── Tap zone ── */
+    .tap-zone {
+      position: absolute;
+      border: 2.5px solid rgba(255, 220, 0, 0.9);
+      background: rgba(255, 220, 0, 0.08);
+      border-radius: 6px;
+      cursor: pointer;
+      pointer-events: auto;
+      touch-action: manipulation;
+      animation: pulse 1.1s ease-in-out infinite;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .tap-zone::after {
+      content: '▶';
+      font-size: clamp(1.2rem, 5vw, 1.6rem);
+      color: rgba(255, 220, 0, 0.9);
+    }
+    .tap-zone:active { background: rgba(255, 220, 0, 0.25); }
+    @media (hover: hover) {
+      .tap-zone:hover { background: rgba(255, 220, 0, 0.22); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { border-color: rgba(255, 220, 0, 0.9); }
+      50%       { border-color: rgba(255, 220, 0, 0.2); }
+    }
+
+    @media (max-width: 400px) {
+      #player-wrap { border-radius: 0; max-width: 100vw; }
+      body { padding: 14px 0; gap: 10px; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>IVF Player</h1>
+
+  <!-- Visible solo si el usuario abre el HTML localmente -->
+  <input type="file" id="file-picker" accept=".mp4,video/mp4" style="display:none">
+  <button id="load-btn" style="display:none" onclick="document.getElementById('file-picker').click()">
+    Abrir video.ivf.mp4
+  </button>
+
+  <div id="progress-wrap"><div id="progress-bar"></div></div>
+  <div id="status">Cargando…</div>
+
+  <div id="player-wrap">
+    <video id="video" controls playsinline webkit-playsinline></video>
+    <div id="overlay"></div>
+  </div>
+
+  <script>
+    const video       = document.getElementById('video');
+    const overlay     = document.getElementById('overlay');
+    const statusEl    = document.getElementById('status');
+    const playerWrap  = document.getElementById('player-wrap');
+    const progressWrap = document.getElementById('progress-wrap');
+    const progressBar  = document.getElementById('progress-bar');
+
+    let sortedEvents = [];
+    let nextEventIdx = 0;
+
+    // ─── Arranque: servidor vs. local ────────────────────────────────────────
+
+    if (window.location.protocol !== 'file:') {
+      // Estamos en Vercel (o cualquier servidor): cargar automáticamente
+      autoLoadFromServer('video_ivf.mp4');
+    } else {
+      // Apertura local: mostrar selector de archivo
+      statusEl.textContent = 'Ningún archivo cargado';
+      document.getElementById('load-btn').style.display = 'block';
+      document.getElementById('file-picker').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (file) loadFromBlob(file, URL.createObjectURL(file));
+      });
+    }
+
+    // ─── Carga desde URL (Vercel) ─────────────────────────────────────────────
+
+    async function autoLoadFromServer(url) {
+      try {
+        // El <video> apunta directo a la URL (streaming nativo del browser)
+        video.src = url;
+        playerWrap.style.display = 'block';
+
+        // Descargamos el mismo archivo para extraer el IVF track con mp4box
+        statusEl.textContent = 'Descargando metadata IVF…';
+        progressWrap.style.display = 'block';
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+
+        const contentLength = res.headers.get('Content-Length');
+        const total = contentLength ? parseInt(contentLength) : 0;
+        const reader = res.body.getReader();
+        const chunks = [];
+        let received = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          if (total) progressBar.style.width = Math.round((received / total) * 100) + '%';
+        }
+
+        progressWrap.style.display = 'none';
+
+        const arrayBuffer = await new Blob(chunks).arrayBuffer();
+        parseMp4Buffer(arrayBuffer);
+
+      } catch (err) {
+        statusEl.textContent = 'Error al cargar: ' + err.message;
+        progressWrap.style.display = 'none';
+      }
+    }
+
+    // ─── Carga desde File (local) ────────────────────────────────────────────
+
+    function loadFromBlob(file, objectUrl) {
+      sortedEvents = [];
+      nextEventIdx = 0;
+      overlay.innerHTML = '';
+      if (video.src) URL.revokeObjectURL(video.src);
+      video.src = objectUrl;
+      playerWrap.style.display = 'block';
+      statusEl.textContent = 'Analizando IVF track…';
+
+      const reader = new FileReader();
+      reader.onload = e => parseMp4Buffer(e.target.result);
+      reader.readAsArrayBuffer(file);
+    }
+
+    // ─── Extracción del IVF track con mp4box ─────────────────────────────────
+
+    function parseMp4Buffer(arrayBuffer) {
+      sortedEvents = [];
+      nextEventIdx = 0;
+
+      const mp4box = MP4Box.createFile();
+
+      mp4box.onReady = function(info) {
+        const ivfTrack = info.tracks.find(t =>
+          (t.codec && t.codec.includes('mett')) ||
+          t.name === 'IVF_Track' ||
+          t.type === 'metadata'
+        );
+        if (!ivfTrack) {
+          statusEl.textContent = 'Sin IVF track — reproducción normal.';
+          return;
+        }
+        mp4box.setExtractionOptions(ivfTrack.id, null, { nbSamples: 9999 });
+        mp4box.start();
+      };
+
+      mp4box.onSamples = function(_id, _ref, samples) {
+        for (const s of samples) {
+          let ev;
+          try { ev = JSON.parse(new TextDecoder().decode(s.data)); }
+          catch { continue; }
+          ev._time = s.dts / s.timescale;
+          ev._id   = ev.id || ('auto-' + ev._time);
+          if (ev.type !== 'manifest') sortedEvents.push(ev);
+        }
+        sortedEvents.sort((a, b) => a._time - b._time);
+        statusEl.textContent = `IVF listo — ${sortedEvents.length} evento(s).`;
+      };
+
+      mp4box.onError = err => { statusEl.textContent = 'Error MP4: ' + err; };
+
+      arrayBuffer.fileStart = 0;
+      mp4box.appendBuffer(arrayBuffer);
+      mp4box.flush();
+    }
+
+    // ─── Sincronización ───────────────────────────────────────────────────────
+
+    video.addEventListener('seeking', () => {
+      clearInteractiveUI();
+      const ct = video.currentTime;
+      nextEventIdx = sortedEvents.findIndex(e => e._time > ct);
+      if (nextEventIdx === -1) nextEventIdx = sortedEvents.length;
+    });
+
+    video.addEventListener('timeupdate', () => {
+      const ct = video.currentTime;
+      while (
+        nextEventIdx < sortedEvents.length &&
+        sortedEvents[nextEventIdx]._time <= ct
+      ) {
+        executeEvent(sortedEvents[nextEventIdx]);
+        nextEventIdx++;
+      }
+    });
+
+    // ─── Ejecución de eventos ─────────────────────────────────────────────────
+
+    function executeEvent(ev) {
+      switch (ev.type) {
+        case 'choice':   showChoice(ev);  break;
+        case 'tap_zone': showTapZone(ev); break;
+        case 'pause':    video.pause();   break;
+        case 'jump':
+          if (ev.target !== undefined) video.currentTime = ev.target;
+          break;
+      }
+    }
+
+    function showChoice(ev) {
+      video.pause();
+      const bg = document.createElement('div');
+      bg.className = 'choice-bg';
+
+      for (const opt of (ev.options || [])) {
+        const btn = document.createElement('button');
+        btn.className = 'choice-btn';
+        btn.textContent = opt.label;
+        const pick = () => {
+          bg.remove();
+          if (opt.jump !== undefined) video.currentTime = opt.jump;
+          video.play();
+        };
+        btn.addEventListener('click', pick);
+        btn.addEventListener('touchend', e => { e.preventDefault(); pick(); });
+        bg.appendChild(btn);
+      }
+
+      overlay.appendChild(bg);
+    }
+
+    function showTapZone(ev) {
+      const z = ev.zone;
+      if (!z) return;
+      const el = document.createElement('div');
+      el.className = 'tap-zone';
+      el.style.left   = (z.x * 100) + '%';
+      el.style.top    = (z.y * 100) + '%';
+      el.style.width  = (z.w * 100) + '%';
+      el.style.height = (z.h * 100) + '%';
+      const act = () => { el.remove(); executeAction(ev.action, ev); };
+      el.addEventListener('click', act);
+      el.addEventListener('touchend', e => { e.preventDefault(); act(); });
+      overlay.appendChild(el);
+      setTimeout(() => el.remove(), 10000);
+    }
+
+    function executeAction(action, ev) {
+      switch (action) {
+        case 'jump':
+          if (ev.target !== undefined) { video.currentTime = ev.target; video.play(); }
+          break;
+        case 'pause':  video.pause(); break;
+        case 'open_url':
+          if (ev.url) window.open(ev.url, '_blank', 'noopener,noreferrer');
+          break;
+      }
+    }
+
+    function clearInteractiveUI() { overlay.innerHTML = ''; }
+  </script>
+</body>
+</html>
