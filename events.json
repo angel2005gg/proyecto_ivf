@@ -1,0 +1,45 @@
+{
+  "ivf": "1.0",
+  "events": [
+    {
+      "id": "choice-001",
+      "t": 6,
+      "type": "choice",
+      "pause": true,
+      "options": [
+        { "label": "Kevin" },
+        { "label": "Enzo", "jump": 114 }
+      ]
+    },
+    {
+      "id": "choice-002",
+      "t": 28,
+      "type": "choice",
+      "pause": true,
+      "options": [
+        { "label": "Encender" },
+        { "label": "Permancer", "jump": 44 }
+      ]
+    },
+    {
+      "id": "choice-003",
+      "t": 55,
+      "type": "choice",
+      "pause": true,
+      "options": [
+        { "label": "Sujetar" },
+        { "label": "Te niegas", "jump": 72 }
+      ]
+    },
+    {
+      "id": "choice-004",
+      "t": 89,
+      "type": "choice",
+      "pause": true,
+      "options": [
+        { "label": "Abrir" },
+        { "label": "No tocar", "jump": 105 }
+      ]
+    }
+  ]
+}
